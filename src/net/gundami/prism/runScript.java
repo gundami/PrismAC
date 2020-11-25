@@ -4,35 +4,34 @@ import org.zeroturnaround.exec.InvalidExitValueException;
 import org.zeroturnaround.exec.ProcessExecutor;
 import org.zeroturnaround.exec.stream.slf4j.Slf4jStream;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.concurrent.TimeoutException;
 
 public class runScript {
-    File path=new File("./config/haproxy/config");
+    File path=new File("./config/haproxy/tmp/frontend");
     public Runnable Haproxy() throws IOException {
         return new Runnable() {
             @Override
             public void run() {
                 try {
                     String[] configFilesArray=path.list();
-                    String configFiles="";
-                    for(int i=0;i<configFilesArray.length;i++){
-                        if(i == configFilesArray.length - 1){
-                            configFiles = configFiles + " ./config/haproxy/config/"+configFilesArray[i];
+                    String frontendFiles="";
+                    String backendFiles="";
+                    frontendFiles=frontendFiles+readFile("./config/haproxy/haproxy.cfg")+"\n";
+                    backendFiles=backendFiles+readFile("./config/haproxy/haproxy-backend.cfg")+"\n";
+                    for(int i=0;i< configFilesArray.length;i++){
+                        frontendFiles=frontendFiles+readFile("./config/haproxy/tmp/frontend/"+configFilesArray[i]);
 
-                        }else {
-                            configFiles = configFiles + " ./config/haproxy/config/"+configFilesArray[i] + " -f ";
-
-                        }
+                        backendFiles=backendFiles+readFile("./config/haproxy/tmp/backend/"+configFilesArray[i]);
                     }
-                    BufferedWriter out = new BufferedWriter(new FileWriter("./scripts/haproxy.sh"));
-                    out.write("#!/bin/bash\n" +
-                            "export LD_LIBRARY_PATH=\"/home/container/lib\"\n"+
-                            "./bin/haproxy -f ./config/haproxy/haproxy.cfg -f" + configFiles + " -st");
-                    out.close();
+
+                    BufferedWriter frontend = new BufferedWriter(new FileWriter("./config/haproxy/frontend.cfg"));
+                    frontend.write(frontendFiles+"#default to frps\n" +
+                            "    default_backend frp_app");
+                    frontend.close();
+                    BufferedWriter backend = new BufferedWriter(new FileWriter("./config/haproxy/backend.cfg"));
+                    backend.write(backendFiles);
+                    backend.close();
 
                     new ProcessExecutor().command("/bin/bash","-c", "./scripts/haproxy.sh")
                             .redirectOutput(Slf4jStream.of("haproxy").asInfo()).execute();
@@ -124,6 +123,21 @@ public class runScript {
 
             }
         };
+    }
+    public String readFile(String strFile){
+        try{
+            InputStream is = new FileInputStream(strFile);
+            int iAvail = is.available();
+            byte[] bytes = new byte[iAvail];
+            is.read(bytes);
+            String result = new String(bytes);
+            is.close();
+            return result;
+        }catch(Exception e){
+            e.printStackTrace();
+            return "error";
+        }
+
     }
 
 }
